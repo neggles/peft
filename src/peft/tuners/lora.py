@@ -18,12 +18,11 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import List, Optional
 
+import bitsandbytes as bnb
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers.pytorch_utils import Conv1D
-
-import bitsandbytes as bnb
 
 from ..utils import PeftConfig, PeftType, transpose
 
@@ -48,7 +47,9 @@ class LoraConfig(PeftConfig):
     """
 
     r: int = field(default=8, metadata={"help": "Lora attention dimension"})
-    target_modules: Optional[list] = field(default=None, metadata={"help": "List of modules to replace with Lora"})
+    target_modules: Optional[list] = field(
+        default=None, metadata={"help": "List of modules to replace with Lora"}
+    )
     lora_alpha: int = field(default=None, metadata={"help": "Lora alpha"})
     lora_dropout: float = field(default=None, metadata={"help": "Lora dropout"})
     merge_weights: bool = field(
@@ -58,8 +59,12 @@ class LoraConfig(PeftConfig):
         default=False,
         metadata={"help": "Set this to True if the layer to replace stores weight like (fan_in, fan_out)"},
     )
-    enable_lora: Optional[List[bool]] = field(default=None, metadata={"help": "Used with `lora.MergedLinear`."})
-    bias: str = field(default="none", metadata={"help": "Bias type for Lora. Can be 'none', 'all' or 'lora_only'"})
+    enable_lora: Optional[List[bool]] = field(
+        default=None, metadata={"help": "Used with `lora.MergedLinear`."}
+    )
+    bias: str = field(
+        default="none", metadata={"help": "Bias type for Lora. Can be 'none', 'all' or 'lora_only'"}
+    )
     modules_to_save: Optional[List[str]] = field(
         default=None,
         metadata={
@@ -189,6 +194,7 @@ class LoraModel(torch.nn.Module):
 # Below code is based on https://github.com/microsoft/LoRA/blob/main/loralib/layers.py
 # and modified to work with PyTorch FSDP
 
+
 #  ------------------------------------------------------------------------------------------
 #  Copyright (c) Microsoft Corporation. All rights reserved.
 #  Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
@@ -227,7 +233,9 @@ class Linear(nn.Linear, LoraLayer):
         **kwargs,
     ):
         nn.Linear.__init__(self, in_features, out_features, **kwargs)
-        LoraLayer.__init__(self, r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, merge_weights=merge_weights)
+        LoraLayer.__init__(
+            self, r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, merge_weights=merge_weights
+        )
 
         self.fan_in_fan_out = fan_in_fan_out
         # Actual trainable parameters
@@ -297,7 +305,9 @@ class MergedLinear(nn.Linear, LoraLayer):
         **kwargs,
     ):
         nn.Linear.__init__(self, in_features, out_features, **kwargs)
-        LoraLayer.__init__(self, r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, merge_weights=merge_weights)
+        LoraLayer.__init__(
+            self, r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, merge_weights=merge_weights
+        )
         if out_features % len(enable_lora) != 0:
             raise ValueError("The length of enable_lora must divide out_features")
         self.enable_lora = enable_lora
@@ -316,7 +326,9 @@ class MergedLinear(nn.Linear, LoraLayer):
             # Freezing the pre-trained weight matrix
             self.weight.requires_grad = False
             # Compute the indices
-            self.lora_ind = self.weight.new_zeros((out_features,), dtype=torch.bool).view(len(enable_lora), -1)
+            self.lora_ind = self.weight.new_zeros((out_features,), dtype=torch.bool).view(
+                len(enable_lora), -1
+            )
             self.lora_ind[enable_lora, :] = True
             self.lora_ind = self.lora_ind.view(-1)
         self.reset_parameters()
@@ -333,23 +345,73 @@ class MergedLinear(nn.Linear, LoraLayer):
     def zero_pad(self, x):
         result = x.new_zeros((*x.shape[:-1], self.out_features))
         result = result.view(-1, self.out_features)
-        result[:, self.lora_ind] = x.reshape(-1, self.out_features // len(self.enable_lora) * sum(self.enable_lora))
+        result[:, self.lora_ind] = x.reshape(
+            -1, self.out_features // len(self.enable_lora) * sum(self.enable_lora)
+        )
         return result.view((*x.shape[:-1], self.out_features))
 
     def train(self, mode: bool = True):
-        nn.Linear.train(self, mode)
-        self.lora_A.train(mode)
-        self.lora_B.train(mode)
-        if self.merge_weights and self.merged:
-            # Make sure that the weights are not merged
-            if self.r > 0 and any(self.enable_lora):
-                delta_w = F.conv1d(
-                    self.lora_A.weight.data.unsqueeze(0),
-                    self.lora_B.weight.data.unsqueeze(-1),
-                    groups=sum(self.enable_lora),
-                ).squeeze(0)
-                self.weight.data -= self.zero_pad(transpose(delta_w * self.scaling, self.fan_in_fan_out))
-            self.merged = False
+        if mode:
+            nn.Linear.train(self, mode)
+            self.lora_A.train(mode)
+            self.lora_B.train(mode)
+            if self.merge_weights and self.merged:
+                if self.r > 0 and any(self.enable_lora):
+                    w_down = self.lora_A.weight.squeeze()
+                    w_up = self.lora_B.weight.squeeze()
+                    if self.lora_B.groups > 1:
+                        delta_w = torch.zeros((w_up.shape[0], w_down.shape[1]))
+                        for i in range(self.lora_B.groups):
+                            intermediate_chn_per_group = w_down.shape[0] // self.lora_B.groups
+                            out_channel_per_group = w_up.shape[0] // self.lora_B.groups
+                            wdown_current = w_down[
+                                intermediate_chn_per_group * i : intermediate_chn_per_group * (i + 1), :
+                            ]
+                            wup_current = w_up[out_channel_per_group * i : out_channel_per_group * (i + 1), :]
+                            delta_w_current = torch.bmm(wup_current[None, :], wdown_current[None, :])[0]
+                            delta_w[
+                                out_channel_per_group * i : out_channel_per_group * (i + 1), :
+                            ] = delta_w_current
+
+                    else:
+                        delta_w = torch.bmm(w_up[None, :], w_down[None, :])[0]
+                    self.delta_w = delta_w.to(self.weight.device)
+                    delta_w_full = delta_w.new_zeros(self.weight.shape)
+                    delta_w_full[self.lora_ind, :] = delta_w
+                    self.weight.data -= delta_w_full.to(self.weight.device) * self.scaling
+                self.merged = False
+        else:
+            nn.Linear.train(self, mode)
+            self.lora_A.eval()
+            self.lora_B.eval()
+            if self.merge_weights and not self.merged:
+                if self.lora_B.weight.eq(0).all():
+                    print("Warning: lora_B is all zero, please call eval after loading peft weights")
+                    return
+                if self.r > 0 and any(self.enable_lora):
+                    w_down = self.lora_A.weight.squeeze()
+                    w_up = self.lora_B.weight.squeeze()
+                    if self.lora_B.groups > 1:
+                        delta_w = torch.zeros((w_up.shape[0], w_down.shape[1]))
+                        for i in range(self.lora_B.groups):
+                            intermediate_chn_per_group = w_down.shape[0] // self.lora_B.groups
+                            out_channel_per_group = w_up.shape[0] // self.lora_B.groups
+                            wdown_current = w_down[
+                                intermediate_chn_per_group * i : intermediate_chn_per_group * (i + 1), :
+                            ]
+                            wup_current = w_up[out_channel_per_group * i : out_channel_per_group * (i + 1), :]
+                            delta_w_current = torch.bmm(wup_current[None, :], wdown_current[None, :])[0]
+                            delta_w[
+                                out_channel_per_group * i : out_channel_per_group * (i + 1), :
+                            ] = delta_w_current
+
+                    else:
+                        delta_w = torch.bmm(w_up[None, :], w_down[None, :])[0]
+                    self.delta_w = delta_w.to(self.weight.device)
+                    delta_w_full = delta_w.new_zeros(self.weight.shape)
+                    delta_w_full[self.lora_ind, :] = delta_w
+                    self.weight.data += delta_w_full.to(self.weight.device) * self.scaling
+                self.merged = True
 
     def eval(self):
         nn.Linear.eval(self)
@@ -372,9 +434,10 @@ class MergedLinear(nn.Linear, LoraLayer):
         else:
             result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
             if self.r > 0:
-                after_A = self.lora_A(self.lora_dropout(x))
+                after_A = self.lora_A(x)
                 after_B = self.lora_B(after_A.transpose(-2, -1)).transpose(-2, -1)
-                result += self.zero_pad(after_B) * self.scaling
+                lora_delta = self.zero_pad(after_B) * self.scaling
+                result += lora_delta
             return result
 
 

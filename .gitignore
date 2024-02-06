@@ -139,3 +139,6 @@ dmypy.json
 
 # More test things
 wandb
+
+# setuptools-scm
+src/peft/_version.py
