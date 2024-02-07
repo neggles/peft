@@ -18,9 +18,8 @@ import os
 from dataclasses import asdict, dataclass, field
 from typing import Optional, Union
 
-from transformers.utils import PushToHubMixin
-
 from huggingface_hub import hf_hub_download
+from transformers.utils import PushToHubMixin
 
 from .adapters_utils import CONFIG_NAME
 
@@ -50,6 +49,7 @@ class PeftConfigMixin(PushToHubMixin):
     Args:
         peft_type (Union[[`~peft.utils.config.PeftType`], `str`]): The type of Peft method to use.
     """
+
     peft_type: Optional[PeftType] = field(default=None, metadata={"help": "The type of PEFT model."})
 
     @property
@@ -98,8 +98,8 @@ class PeftConfigMixin(PushToHubMixin):
         else:
             try:
                 config_file = hf_hub_download(pretrained_model_name_or_path, CONFIG_NAME)
-            except:
-                raise ValueError(f"Can't find config.json at '{pretrained_model_name_or_path}'")
+            except Exception as e:
+                raise ValueError(f"Can't find config.json at '{pretrained_model_name_or_path}'") from e
 
         loaded_attributes = cls.from_json_file(config_file)
 
