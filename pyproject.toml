@@ -1,3 +1,99 @@
-[tool.black]
+[project]
+name = "peft"
+authors = [
+  { name = "The HuggingFace team", email = "sourab@huggingface.co" },
+]
+maintainers = [
+  { name = "Andi Powers-Holmes", email = "aholmes@omnom.net" },
+]
+description = "A neural network trainer (for weebs)"
+readme = "README.md"
+requires-python = ">=3.9, <3.11"
+keywords = [
+  "deep-learning",
+  "machine-learning",
+  "pytorch",
+]
+license = { file = "LICENSE" }
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Education",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dynamic = ["version"]
+dependencies = [
+  "numpy>=1.17",
+  "packaging>=20.0",
+  "psutil",
+  "pyyaml",
+  "torch>=1.13.0",
+  "transformers",
+  "accelerate",
+  "bitsandbytes",
+]
+
+[project.urls]
+Repository = "https://github.com/neggles/peft"
+Documentation = "https://huggingface.co/docs/peft"
+
+[project.optional-dependencies]
+quality = [
+  "ruff >=0.0.289",
+  "setuptools-scm >= 8.0.0",
+  "pre-commit >= 3.0.0",     # remember to run `pre-commit install` after installing
+  "tabulate >= 0.8.9",       # for inductor log prettyprinting
+]
+docs-specific = [
+  "hf-doc-builder",
+]
+dev = [
+  "peft[quality]",
+  "peft[docs-specific]",
+]
+
+
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=64", "wheel", "setuptools_scm>=8"]
+
+[tool.setuptools_scm]
+write_to = "src/peft/_version.py"
+
+
+[tool.ruff]
 line-length = 119
-target-version = ['py36']
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["C", "E", "F", "I", "W"]
+ignore = [
+  "C901", # function too complex
+  "E501", # line too long - will be fixed in format
+  "E741", # ambiguous variable name
+  "W605", # invalid escape sequence
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+skip-magic-trailing-comma = false
+docstring-code-format = true
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+combine-as-imports = true
+force-wrap-aliases = true
+known-local-folder = ["src"]
+known-first-party = ["peft"]
+
+[tool.pyright]
+include = ["src/**"]
+exclude = ["/usr/lib/**"]
+stubPath = "./typings"

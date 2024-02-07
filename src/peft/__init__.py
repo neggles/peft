@@ -17,9 +17,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "0.1.0"
+try:
+    from ._version import (
+        version as __version__,
+        version_tuple,
+    )
+except ImportError:
+    __version__ = "unknown (no version information available)"
+    version_tuple = (0, 0, "unknown", "noinfo")
 
-from .mapping import MODEL_TYPE_TO_PEFT_MODEL_MAPPING, PEFT_TYPE_TO_CONFIG_MAPPING, get_peft_config, get_peft_model
+
+from .mapping import (
+    MODEL_TYPE_TO_PEFT_MODEL_MAPPING,
+    PEFT_TYPE_TO_CONFIG_MAPPING,
+    get_peft_config,
+    get_peft_model,
+)
 from .peft_model import (
     PeftModel,
     PeftModelForCausalLM,
@@ -50,3 +63,36 @@ from .utils import (
     set_peft_model_state_dict,
     shift_tokens_right,
 )
+
+__all__ = [
+    "__version__",
+    "version_tuple",
+    "MODEL_TYPE_TO_PEFT_MODEL_MAPPING",
+    "PEFT_TYPE_TO_CONFIG_MAPPING",
+    "get_peft_config",
+    "get_peft_model",
+    "PeftModel",
+    "PeftModelForCausalLM",
+    "PeftModelForSeq2SeqLM",
+    "PeftModelForSequenceClassification",
+    "PeftModelForTokenClassification",
+    "LoraConfig",
+    "LoraModel",
+    "PrefixEncoder",
+    "PrefixTuningConfig",
+    "PromptEmbedding",
+    "PromptEncoder",
+    "PromptEncoderConfig",
+    "PromptEncoderReparameterizationType",
+    "PromptTuningConfig",
+    "PromptTuningInit",
+    "TRANSFORMERS_MODELS_TO_PREFIX_TUNING_POSTPROCESS_MAPPING",
+    "PeftConfig",
+    "PeftType",
+    "PromptLearningConfig",
+    "TaskType",
+    "bloom_model_postprocess_past_key_value",
+    "get_peft_model_state_dict",
+    "set_peft_model_state_dict",
+    "shift_tokens_right",
+]
